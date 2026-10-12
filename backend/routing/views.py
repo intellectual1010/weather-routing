@@ -39,7 +39,7 @@ from .services.corridor_service import (
 def health_check(request):
     return Response({
         "status": "ok",
-        "service": "Spotter Weather Routing API",
+        "service": "Weather Routing API",
         "version": "1.0.0",
     })
 

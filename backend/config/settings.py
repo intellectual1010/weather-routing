@@ -1,6 +1,6 @@
 
 """
-Django settings for Spotter Weather Routing.
+Django settings for Weather Routing.
 
 Django 6.1.2
 Supports local development and Render production deployment.
@@ -302,7 +302,7 @@ CACHES = {
         "BACKEND": (
             "django.core.cache.backends.locmem.LocMemCache"
         ),
-        "LOCATION": "spotter-weather-routing",
+        "LOCATION": "weather-routing",
         "TIMEOUT": 900,
     }
 }

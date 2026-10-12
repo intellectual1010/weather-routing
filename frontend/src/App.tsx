@@ -163,7 +163,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-xl font-bold">
-                Spotter Weather Routing
+                Weather Routing
               </h1>
               <p className="text-xs text-slate-400">
                 Weather-Aware Truck Route Planning
