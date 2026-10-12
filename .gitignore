@@ -1,12 +1,21 @@
+# Python
 venv/
 .venv/
 __pycache__/
 *.pyc
 *.sqlite3
+staticfiles/
+
+# Frontend
 node_modules/
 dist/
+
+# Secrets
 .env
 .env.*
 !.env.example
-.idea/
+
+# Local settings
 .vscode/
+.idea/
+.vercel/
