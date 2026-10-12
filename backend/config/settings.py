@@ -11,9 +11,19 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 from pathlib import Path
+import os
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR / ".env")
+
+ORS_API_KEY = os.getenv("ORS_API_KEY", "")
+ORS_BASE_URL = os.getenv(
+    "ORS_BASE_URL",
+    "https://api.openrouteservice.org",
+)
 
 
 # Quick-start development settings - unsuitable for production
