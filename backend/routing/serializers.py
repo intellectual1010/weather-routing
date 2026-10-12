@@ -1,6 +1,6 @@
 
 from rest_framework import serializers
-
+from datetime import datetime
 
 class RouteRequestSerializer(serializers.Serializer):
     origin = serializers.CharField(
@@ -31,7 +31,34 @@ class RouteRequestSerializer(serializers.Serializer):
             )
 
         return attrs
+    
+    def validate_departure_time(self, value):
+        raw = self.initial_data.get("departure_time", "")
 
+        if isinstance(raw, str):
+            text = raw.strip()
+
+            # Require Z or an explicit UTC offset.
+            has_timezone = (
+                text.endswith("Z")
+                or (
+                    len(text) >= 6
+                    and text[-6] in ("+", "-")
+                    and text[-3] == ":"
+                )
+            )
+
+            if not has_timezone:
+                raise serializers.ValidationError(
+                    "Departure time must include a timezone offset."
+                )
+
+        if value.tzinfo is None:
+            raise serializers.ValidationError(
+                "Timezone-aware departure time is required."
+            )
+
+        return value
 
 class CorridorPointSerializer(serializers.ListField):
     child = serializers.FloatField()

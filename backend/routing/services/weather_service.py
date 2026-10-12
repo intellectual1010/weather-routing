@@ -3,6 +3,9 @@ from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 import math
 import requests
+import hashlib
+import json
+from django.core.cache import cache
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 
@@ -29,7 +32,7 @@ def parse_utc(value):
     return value.astimezone(timezone.utc)
 
 
-def fetch_weather_batch(points):
+def _fetch_weather_batch_uncached(points):
     """
     Fetch hourly forecasts for multiple locations.
     Each point must include latitude, longitude and eta.
@@ -94,6 +97,50 @@ def fetch_weather_batch(points):
         for data, point in zip(payload, points)
     ]
 
+def fetch_weather_batch(points):
+    """
+    Cache the forecast response for identical checkpoint
+    coordinates and ETA values for 15 minutes.
+    """
+
+    if not points:
+        return []
+
+    cache_input = [
+        {
+            "lat": round(float(p["latitude"]), 3),
+            "lon": round(float(p["longitude"]), 3),
+            "eta_hour": parse_utc(p["eta"]).replace(
+                minute=0,
+                second=0,
+                microsecond=0,
+            ).isoformat(),
+        }
+        for p in points
+    ]
+
+    raw_key = json.dumps(
+        cache_input,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+    digest = hashlib.sha256(
+        raw_key.encode("utf-8")
+    ).hexdigest()
+
+    cache_key = f"weather:batch:v1:{digest}"
+
+    cached = cache.get(cache_key)
+
+    if cached is not None:
+        return cached
+
+    result = _fetch_weather_batch_uncached(points)
+
+    cache.set(cache_key, result, timeout=900)
+
+    return result
 
 def select_forecast(data, eta):
     """

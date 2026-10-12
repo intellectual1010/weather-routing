@@ -43,7 +43,6 @@ def health_check(request):
         "version": "1.0.0",
     })
 
-
 @api_view(["GET"])
 def geocode_search(request):
     query = request.query_params.get("q", "").strip()
@@ -63,9 +62,6 @@ def geocode_search(request):
             {"error": str(exc)},
             status=status.HTTP_502_BAD_GATEWAY,
         )
-
-
-
 
 @api_view(["POST"])
 def calculate_routes(request):
