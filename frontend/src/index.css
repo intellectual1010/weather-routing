@@ -1,12 +1,43 @@
+
 @import "tailwindcss";
+
+:root {
+  font-family: Inter, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
 
 html,
 body,
 #root {
+  margin: 0;
   min-height: 100%;
 }
 
 body {
-  margin: 0;
-  font-family: Inter, system-ui, Arial, sans-serif;
+  background: #f8fafc;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* Keep Leaflet overlays below app-level dialogs/header. */
+.leaflet-container {
+  z-index: 0;
+  font-family: inherit;
+}
+
+.leaflet-popup-content p {
+  margin: 4px 0;
 }
