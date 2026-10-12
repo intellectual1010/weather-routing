@@ -36,7 +36,7 @@ class RoutingAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    @patch("routing.views.get_routes")
+    @patch("routing.views.get_mapbox_routes")
     @patch("routing.views.geocode_location")
     def test_route_endpoint(self, mock_geocode, mock_routes):
         mock_geocode.side_effect = [

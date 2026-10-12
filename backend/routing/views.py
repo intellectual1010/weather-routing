@@ -12,6 +12,11 @@ from .services.routing_service import (
     RoutingError,
     get_routes,
 )
+from .services.mapbox_service import (
+    MapboxRoutingError,
+    get_mapbox_routes,
+)
+from .services.checkpoint_service import generate_checkpoints
 
 
 @api_view(["GET"])
@@ -44,6 +49,7 @@ def geocode_search(request):
         )
 
 
+
 @api_view(["POST"])
 def calculate_routes(request):
     serializer = RouteRequestSerializer(data=request.data)
@@ -55,21 +61,39 @@ def calculate_routes(request):
         origin = geocode_location(data["origin"])
         destination = geocode_location(data["destination"])
 
-        result = get_routes(
+        result = get_mapbox_routes(
             origin["coordinates"],
             destination["coordinates"],
         )
+
+        for route in result["routes"]:
+            route["checkpoints"] = generate_checkpoints(
+                route=route,
+                departure_time=data["departure_time"],
+                interval_miles=int(data["checkpoint_interval"]),
+            )
+
+            route["checkpoint_count"] = len(
+                route["checkpoints"]
+            )
 
         return Response({
             "origin": origin,
             "destination": destination,
             "departure_time": data["departure_time"].isoformat(),
             "load_weight": data["load_weight"],
-            "checkpoint_interval": data["checkpoint_interval"],
+            "checkpoint_interval": int(
+                data["checkpoint_interval"]
+            ),
+            "routing_provider": "mapbox",
             **result,
         })
 
-    except (GeocodingError, RoutingError) as exc:
+    except (
+        GeocodingError,
+        MapboxRoutingError,
+        ValueError,
+    ) as exc:
         return Response(
             {"error": str(exc)},
             status=status.HTTP_502_BAD_GATEWAY,

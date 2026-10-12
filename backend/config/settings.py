@@ -25,6 +25,11 @@ ORS_BASE_URL = os.getenv(
     "https://api.openrouteservice.org",
 )
 
+MAPBOX_ACCESS_TOKEN = os.getenv("MAPBOX_ACCESS_TOKEN", "")
+MAPBOX_BASE_URL = os.getenv(
+    "MAPBOX_BASE_URL",
+    "https://api.mapbox.com",
+)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
