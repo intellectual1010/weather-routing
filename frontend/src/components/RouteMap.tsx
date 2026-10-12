@@ -20,12 +20,18 @@ import {
   formatDateTime,
 } from "../utils/risk";
 
+import WeatherCorridor from "./WeatherCorridor";
+import type { CorridorForecast } from "../types/corridor";
+
 interface Props {
   routes: RouteOption[];
   selectedRouteId: string | null;
   origin?: Location;
   destination?: Location;
   onSelectRoute: (id: string) => void;
+  corridorForecast?: CorridorForecast | null;
+  forecastHour?: number;
+  showCorridor?: boolean;
 }
 
 function toLatLngs(route: RouteOption): L.LatLngTuple[] {
@@ -85,6 +91,9 @@ export default function RouteMap({
   origin,
   destination,
   onSelectRoute,
+  corridorForecast = null,
+  forecastHour = 0,
+  showCorridor = false,
 }: Props) {
   const selectedRoute = routes.find(
     (route) => route.id === selectedRouteId
@@ -116,22 +125,30 @@ export default function RouteMap({
           const selected = selectedRouteId === route.id;
 
           return (
-            <Polyline
-              key={route.id}
-              positions={toLatLngs(route)}
-              eventHandlers={{
-                click: () => onSelectRoute(route.id),
-              }}
-              pathOptions={{
-                color: routeColors[index % routeColors.length],
-                weight: selected ? 7 : 4,
-                opacity: selected ? 0.95 : 0.45,
-              }}
-            />
+            <>
+              <Polyline
+                key={route.id}
+                positions={toLatLngs(route)}
+                eventHandlers={{
+                  click: () => onSelectRoute(route.id),
+                }}
+                pathOptions={{
+                  color: routeColors[index % routeColors.length],
+                  weight: selected ? 7 : 4,
+                  opacity: selected ? 0.95 : 0.45,
+                }}
+              />
+              {showCorridor && corridorForecast && (
+                <WeatherCorridor
+                  data={corridorForecast}
+                  hour={forecastHour}
+                />
+              )}
+            </>
           );
         })}
 
-        {selectedRoute?.checkpoints.map((point) => (
+        {!showCorridor && selectedRoute?.checkpoints.map((point) => (
           <CircleMarker
             key={point.id}
             center={[point.latitude, point.longitude]}

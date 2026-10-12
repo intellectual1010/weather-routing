@@ -31,3 +31,33 @@ class RouteRequestSerializer(serializers.Serializer):
             )
 
         return attrs
+
+
+class CorridorPointSerializer(serializers.ListField):
+    child = serializers.FloatField()
+    min_length = 2
+    max_length = 2
+
+
+class CorridorForecastSerializer(serializers.Serializer):
+    coordinates = serializers.ListField(
+        child=CorridorPointSerializer(),
+        min_length=2,
+        max_length=10000,
+    )
+    load_weight = serializers.IntegerField(
+        min_value=0,
+        max_value=100000,
+    )
+
+    def validate_coordinates(self, coordinates):
+        for longitude, latitude in coordinates:
+            if not (-180 <= longitude <= 180):
+                raise serializers.ValidationError(
+                    "Invalid longitude."
+                )
+            if not (-90 <= latitude <= 90):
+                raise serializers.ValidationError(
+                    "Invalid latitude."
+                )
+        return coordinates

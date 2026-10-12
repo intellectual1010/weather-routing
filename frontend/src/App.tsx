@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   AlertTriangle,
   CloudSun,
@@ -19,6 +19,10 @@ import { checkBackendHealth } from "./services/api";
 import { analyzeRoutes, getApiError } from "./services/routing";
 import { routeColors } from "./utils/risk";
 
+import ForecastSlider from "./components/ForecastSlider";
+import { fetchCorridorForecast } from "./services/weather";
+import type { CorridorForecast } from "./types/corridor";
+
 import type {
   RouteResponse,
   TripRequest,
@@ -32,14 +36,102 @@ export default function App() {
   const [result, setResult] = useState<RouteResponse | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
 
+  const [forecastHour, setForecastHour] = useState(0);
+  const [showCorridor, setShowCorridor] = useState(false);
+
+  const [corridorForecast, setCorridorForecast] =
+    useState<CorridorForecast | null>(null);
+
+  const [corridorLoading, setCorridorLoading] = useState(false);
+  const [corridorError, setCorridorError] =
+    useState<string | null>(null);
+
+  const corridorCache = useRef(
+    new Map<string, {
+      data: CorridorForecast;
+      fetchedAt: number;
+    }>()
+  );
+
   useEffect(() => {
     checkBackendHealth()
       .then(() => setConnected(true))
       .catch(() => setConnected(false));
   }, []);
 
+
+  useEffect(() => {
+    if (!result || !selectedRouteId || !showCorridor) {
+      setCorridorForecast(null);
+      setCorridorLoading(false);
+      return;
+    }
+
+    const route = result.routes.find(
+      (item) => item.id === selectedRouteId
+    );
+
+    if (!route) return;
+
+    const coordinates = route.geometry.coordinates;
+    const cacheKey = [
+      result.origin.name,
+      result.destination.name,
+      route.id,
+      result.load_weight,
+      result.departure_time,
+    ].join("|");
+
+    const cached = corridorCache.current.get(cacheKey);
+    const maxAgeMs = 15 * 60 * 1000;
+
+    if (cached && Date.now() - cached.fetchedAt < maxAgeMs) {
+      setCorridorForecast(cached.data);
+      setCorridorLoading(false);
+      setCorridorError(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    setCorridorForecast(null);
+    setCorridorLoading(true);
+    setCorridorError(null);
+
+    fetchCorridorForecast(
+      coordinates,
+      result.load_weight
+    )
+      .then((data) => {
+        if (cancelled) return;
+
+        corridorCache.current.set(cacheKey, {
+          data,
+          fetchedAt: Date.now(),
+        });
+
+        setCorridorForecast(data);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setCorridorError(getApiError(error));
+      })
+      .finally(() => {
+        if (!cancelled) setCorridorLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [result, selectedRouteId, showCorridor]);
+
   async function handleAnalyze(trip: TripRequest) {
     setLoading(true);
+    setShowCorridor(false);
+    setForecastHour(0);
+    setCorridorForecast(null);
+    setCorridorError(null);
+    corridorCache.current.clear();
     setError(null);
     setResult(null);
     setSelectedRouteId(null);
@@ -185,18 +277,81 @@ export default function App() {
                 )}
               </div>
 
+              {result && (
+                <div className="flex flex-wrap items-center gap-2 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowCorridor(false)}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                      !showCorridor
+                        ? "bg-cyan-700 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    ETA Checkpoint Risks
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowCorridor(true)}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                      showCorridor
+                        ? "bg-cyan-700 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    48h Weather Heatmap
+                  </button>
+                </div>
+              )}
+
               <RouteMap
                 routes={result?.routes ?? []}
                 selectedRouteId={selectedRouteId}
                 origin={result?.origin}
                 destination={result?.destination}
                 onSelectRoute={setSelectedRouteId}
+                corridorForecast={corridorForecast}
+                forecastHour={forecastHour}
+                showCorridor={showCorridor}
               />
 
               <div className="mt-4">
                 <RiskLegend />
               </div>
             </section>
+
+            {result && showCorridor && (
+              <div className="space-y-3">
+                {corridorLoading && (
+                  <div
+                    role="status"
+                    className="rounded-xl border bg-white p-4 text-sm
+                              text-slate-600"
+                  >
+                    Loading 48-hour corridor weather...
+                  </div>
+                )}
+
+                {corridorError && (
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-red-200
+                              bg-red-50 p-4 text-sm text-red-700"
+                  >
+                    {corridorError}
+                  </div>
+                )}
+
+                {corridorForecast && (
+                  <ForecastSlider
+                    hour={forecastHour}
+                    onChange={setForecastHour}
+                    referenceTime={corridorForecast.reference_time}
+                  />
+                )}
+              </div>
+            )}
 
             {!result && (
               <div className="bg-white border border-slate-200

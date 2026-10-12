@@ -27,6 +27,14 @@ from .services.recommendation_service import (
     recommend_best_route,
 )
 
+from datetime import datetime, timedelta, timezone
+
+from .serializers import CorridorForecastSerializer
+from .services.corridor_service import (
+    CorridorForecastError,
+    get_corridor_forecast,
+)
+
 @api_view(["GET"])
 def health_check(request):
     return Response({
@@ -156,4 +164,35 @@ def calculate_routes(request):
         return Response(
             {"error": "Invalid route or weather data."},
             status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+
+@api_view(["POST"])
+def corridor_forecast(request):
+    serializer = CorridorForecastSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    data = serializer.validated_data
+
+    # Forecast slider starts at the next UTC hour.
+    now = datetime.now(timezone.utc)
+
+    reference_time = now.replace(
+        minute=0,
+        second=0,
+        microsecond=0,
+    ) + timedelta(hours=1)
+
+    try:
+        result = get_corridor_forecast(
+            coordinates=data["coordinates"],
+            reference_time=reference_time,
+            load_weight=data["load_weight"],
+        )
+
+        return Response(result)
+
+    except CorridorForecastError as exc:
+        return Response(
+            {"error": str(exc)},
+            status=status.HTTP_502_BAD_GATEWAY,
         )
