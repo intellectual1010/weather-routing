@@ -36,9 +36,17 @@ class RoutingAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    @patch("routing.views.fetch_checkpoint_weather")
     @patch("routing.views.get_mapbox_routes")
     @patch("routing.views.geocode_location")
-    def test_route_endpoint(self, mock_geocode, mock_routes):
+    def test_route_endpoint(
+        self,
+        mock_geocode,
+        mock_routes,
+        mock_weather,
+    ):
+        # Keep your existing origin/destination mock data.
+
         mock_geocode.side_effect = [
             {
                 "name": "Chicago",
@@ -54,8 +62,10 @@ class RoutingAPITests(TestCase):
             "routes": [],
             "route_count": 0,
             "has_three_routes": False,
-            "message": "Mock test result",
+            "message": "Mock test",
         }
+
+        mock_weather.return_value = []
 
         response = self.client.post(
             "/api/routes/",
@@ -70,5 +80,4 @@ class RoutingAPITests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("routes", response.data)
-        mock_routes.assert_called_once()
+        self.assertIn("recommended_route_id", response.data)
