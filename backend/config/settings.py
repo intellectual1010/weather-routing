@@ -331,7 +331,7 @@ REST_FRAMEWORK = {
 # Suitable for a single-process development/MVP environment.
 # Use Redis for shared caching across production workers.
 
-REDIS_URL = os.getenv("REDIS_URL", "")
+REDIS_URL = os.getenv("REDIS_URL", "").strip()
 
 if REDIS_URL:
     CACHES = {
@@ -340,8 +340,9 @@ if REDIS_URL:
             "LOCATION": REDIS_URL,
             "OPTIONS": {
                 "CLIENT_CLASS": "django_redis.client.DefaultClient",
-                "SOCKET_CONNECT_TIMEOUT": 3,
-                "SOCKET_TIMEOUT": 3,
+                "SOCKET_CONNECT_TIMEOUT": 2,
+                "SOCKET_TIMEOUT": 2,
+                "IGNORE_EXCEPTIONS": True,
             },
             "KEY_PREFIX": "weather-routing",
             "TIMEOUT": 900,
