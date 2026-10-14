@@ -39,6 +39,7 @@ import hashlib
 import json
 import logging
 import time
+import os
 
 from django.core.cache import cache
 from .services.weather_service import _cache_key
