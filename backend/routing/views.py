@@ -75,8 +75,10 @@ def calculate_routes(request):
         destination = geocode_location(data["destination"])
 
         result = get_mapbox_routes(
-            origin["coordinates"],
-            destination["coordinates"],
+            origin_coords=origin["coordinates"],
+            destination_coords=destination["coordinates"],
+            origin_name=data["origin"],
+            destination_name=data["destination"],
         )
 
         routes = result["routes"]
