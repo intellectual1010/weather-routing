@@ -53,6 +53,13 @@ export default function App() {
     }>()
   );
 
+  const mapLoading =
+    loading || (showCorridor && corridorLoading);
+
+  const mapLoadingType = loading
+    ? "routes"
+    : "weather";
+
   useEffect(() => {
     checkBackendHealth()
       .then(() => setConnected(true))
@@ -208,7 +215,7 @@ export default function App() {
           {/* Left panel */}
           <aside className="space-y-5">
             <TripForm
-              loading={loading}
+              loading={mapLoading}
               onSubmit={handleAnalyze}
             />
 
@@ -248,6 +255,7 @@ export default function App() {
                       result.recommended_route_id === route.id
                     }
                     color={routeColors[index % routeColors.length]}
+                    disabled={mapLoading}
                     onClick={() => setSelectedRouteId(route.id)}
                   />
                 ))}
@@ -281,6 +289,7 @@ export default function App() {
                 <div className="flex flex-wrap items-center gap-2 mb-4">
                   <button
                     type="button"
+                    disabled={mapLoading}
                     onClick={() => setShowCorridor(false)}
                     className={`rounded-lg px-4 py-2 text-sm font-medium ${
                       !showCorridor
@@ -293,6 +302,7 @@ export default function App() {
 
                   <button
                     type="button"
+                    disabled={mapLoading}
                     onClick={() => setShowCorridor(true)}
                     className={`rounded-lg px-4 py-2 text-sm font-medium ${
                       showCorridor
@@ -314,6 +324,8 @@ export default function App() {
                 corridorForecast={corridorForecast}
                 forecastHour={forecastHour}
                 showCorridor={showCorridor}
+                loading={mapLoading}
+                loadingType={mapLoadingType}
               />
 
               <div className="mt-4">

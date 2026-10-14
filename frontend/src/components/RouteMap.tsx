@@ -22,6 +22,7 @@ import {
 
 import WeatherCorridor from "./WeatherCorridor";
 import type { CorridorForecast } from "../types/corridor";
+import MapLoadingOverlay from "./MapLoadingOverlay";
 
 interface Props {
   routes: RouteOption[];
@@ -32,6 +33,8 @@ interface Props {
   corridorForecast?: CorridorForecast | null;
   forecastHour?: number;
   showCorridor?: boolean;
+  loading?: boolean;
+  loadingType?: "routes" | "weather";
 }
 
 function toLatLngs(route: RouteOption): L.LatLngTuple[] {
@@ -85,6 +88,33 @@ function LocationMarker({
   );
 }
 
+function MapInteractionLock({ locked }: { locked: boolean }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const handlers = [
+      map.dragging,
+      map.touchZoom,
+      map.doubleClickZoom,
+      map.scrollWheelZoom,
+      map.boxZoom,
+      map.keyboard,
+    ];
+
+    if (locked) {
+      handlers.forEach((handler) => handler.disable());
+    } else {
+      handlers.forEach((handler) => handler.enable());
+    }
+
+    return () => {
+      handlers.forEach((handler) => handler.enable());
+    };
+  }, [map, locked]);
+
+  return null;
+}
+
 export default function RouteMap({
   routes,
   selectedRouteId,
@@ -94,6 +124,8 @@ export default function RouteMap({
   corridorForecast = null,
   forecastHour = 0,
   showCorridor = false,
+  loading = false,
+  loadingType = "routes",
 }: Props) {
   const selectedRoute = routes.find(
     (route) => route.id === selectedRouteId
@@ -106,13 +138,18 @@ export default function RouteMap({
   ];
 
   return (
-    <div className="rounded-xl overflow-hidden border border-slate-200">
+    <div
+      className="relative rounded-xl overflow-hidden
+                border border-slate-200"
+      aria-busy={loading}
+    >
       <MapContainer
         center={[39.5, -98.35]}
         zoom={4}
         scrollWheelZoom
         className="h-[520px] w-full z-0"
       >
+        <MapInteractionLock locked={loading} />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; OpenStreetMap contributors'
@@ -235,6 +272,9 @@ export default function RouteMap({
           />
         )}
       </MapContainer>
+      {loading && (
+        <MapLoadingOverlay type={loadingType} />
+      )}
     </div>
   );
 }

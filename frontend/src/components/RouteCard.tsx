@@ -13,6 +13,7 @@ interface Props {
   recommended: boolean;
   color: string;
   onClick: () => void;
+  disabled?: boolean;
 }
 
 const segments: { level: RiskLevel; key: keyof RouteOption["risk_summary"] }[] = [
@@ -25,7 +26,7 @@ const segments: { level: RiskLevel; key: keyof RouteOption["risk_summary"] }[] =
 ];
 
 export default function RouteCard({
-  route, selected, recommended, color, onClick,
+  route, selected, recommended, color, onClick, disabled
 }: Props) {
   const summary = route.risk_summary;
 
@@ -33,6 +34,7 @@ export default function RouteCard({
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-pressed={selected}
       className={`w-full text-left rounded-xl border-2 bg-white p-4
         hover:shadow-md transition ${
