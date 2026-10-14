@@ -60,6 +60,7 @@ function FitRoute({ route }: { route?: RouteOption }) {
   return null;
 }
 
+
 function LocationMarker({
   location,
   color,
@@ -69,9 +70,29 @@ function LocationMarker({
   color: string;
   title: string;
 }) {
+  // Backend uses GeoJSON order: [longitude, latitude]
+  const coordinates = location.coordinates;
+
+  const latitude =
+    location.latitude ?? coordinates?.[1];
+
+  const longitude =
+    location.longitude ?? coordinates?.[0];
+
+  // Prevent Leaflet from crashing if coordinates are missing
+  if (
+    typeof latitude !== "number" ||
+    typeof longitude !== "number" ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    console.warn("Invalid location coordinates:", location);
+    return null;
+  }
+
   return (
     <CircleMarker
-      center={[location.latitude, location.longitude]}
+      center={[latitude, longitude]}
       radius={9}
       pathOptions={{
         color: "#ffffff",
@@ -156,34 +177,36 @@ export default function RouteMap({
         />
 
         <FitRoute route={selectedRoute} />
-
+        
         {orderedRoutes.map((route) => {
-          const index = routes.findIndex((r) => r.id === route.id);
+          const index = routes.findIndex(
+            (r) => r.id === route.id
+          );
+
           const selected = selectedRouteId === route.id;
 
           return (
-            <>
-              <Polyline
-                key={route.id}
-                positions={toLatLngs(route)}
-                eventHandlers={{
-                  click: () => onSelectRoute(route.id),
-                }}
-                pathOptions={{
-                  color: routeColors[index % routeColors.length],
-                  weight: selected ? 7 : 4,
-                  opacity: selected ? 0.95 : 0.45,
-                }}
-              />
-              {showCorridor && corridorForecast && (
-                <WeatherCorridor
-                  data={corridorForecast}
-                  hour={forecastHour}
-                />
-              )}
-            </>
+            <Polyline
+              key={route.id}
+              positions={toLatLngs(route)}
+              eventHandlers={{
+                click: () => onSelectRoute(route.id),
+              }}
+              pathOptions={{
+                color: routeColors[index % routeColors.length],
+                weight: selected ? 7 : 4,
+                opacity: selected ? 0.95 : 0.45,
+              }}
+            />
           );
         })}
+
+        {showCorridor && corridorForecast && (
+          <WeatherCorridor
+            data={corridorForecast}
+            hour={forecastHour}
+          />
+        )}
 
         {!showCorridor && selectedRoute?.checkpoints.map((point) => (
           <CircleMarker

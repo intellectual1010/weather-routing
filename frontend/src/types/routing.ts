@@ -9,9 +9,9 @@ export type RiskLevel =
 
 export interface Location {
   name: string;
-  latitude: number;
-  longitude: number;
   coordinates: [number, number];
+  latitude?: number;
+  longitude?: number;
 }
 
 export interface Weather {
