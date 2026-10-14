@@ -103,6 +103,12 @@ def calculate_routes(request):
 
     cached_result = cache.get(route_cache_key)
 
+    logger.info(
+        "Route request worker=%s cache_hit=%s",
+        os.getpid(),
+        cached_result is not None,
+    )
+
     if cached_result is not None:
         logger.info("Route analysis cache hit")
         return Response(cached_result)
