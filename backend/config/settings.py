@@ -340,6 +340,8 @@ if REDIS_URL:
             "LOCATION": REDIS_URL,
             "OPTIONS": {
                 "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                "SOCKET_CONNECT_TIMEOUT": 3,
+                "SOCKET_TIMEOUT": 3,
             },
             "KEY_PREFIX": "weather-routing",
             "TIMEOUT": 900,
@@ -348,9 +350,7 @@ if REDIS_URL:
 else:
     CACHES = {
         "default": {
-            "BACKEND": (
-                "django.core.cache.backends.locmem.LocMemCache"
-            ),
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
             "LOCATION": "weather-routing-local",
             "TIMEOUT": 900,
         }
