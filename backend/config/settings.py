@@ -101,11 +101,30 @@ OPEN_METEO_BASE_URL = os.getenv(
     "https://api.open-meteo.com/v1/forecast",
 )
 
+# ============================================================
+# WEATHER API PERFORMANCE CONFIGURATION
+# ============================================================
+
 WEATHERAPI_KEY = os.getenv("WEATHERAPI_KEY", "")
 
 WEATHERAPI_BASE_URL = os.getenv(
     "WEATHERAPI_BASE_URL",
     "https://api.weatherapi.com/v1",
+)
+
+# Weather forecast spatial grid
+WEATHER_GRID_DEGREES = float(
+    os.getenv("WEATHER_GRID_DEGREES", "0.25")
+)
+
+# Maximum concurrent WeatherAPI requests
+WEATHER_MAX_WORKERS = int(
+    os.getenv("WEATHER_MAX_WORKERS", "6")
+)
+
+# Forecast cache duration (seconds)
+WEATHER_CACHE_SECONDS = int(
+    os.getenv("WEATHER_CACHE_SECONDS", "1800")
 )
 
 
@@ -304,16 +323,30 @@ REST_FRAMEWORK = {
 # Suitable for a single-process development/MVP environment.
 # Use Redis for shared caching across production workers.
 
-CACHES = {
-    "default": {
-        "BACKEND": (
-            "django.core.cache.backends.locmem.LocMemCache"
-        ),
-        "LOCATION": "weather-routing",
-        "TIMEOUT": 900,
-    }
-}
+REDIS_URL = os.getenv("REDIS_URL", "")
 
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": REDIS_URL,
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            },
+            "KEY_PREFIX": "weather-routing",
+            "TIMEOUT": 900,
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": (
+                "django.core.cache.backends.locmem.LocMemCache"
+            ),
+            "LOCATION": "weather-routing-local",
+            "TIMEOUT": 900,
+        }
+    }
 
 # ============================================================
 # API REQUEST LIMITS

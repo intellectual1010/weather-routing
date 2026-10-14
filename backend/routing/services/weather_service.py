@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 import requests
 from django.conf import settings
 from django.core.cache import cache
+from math import floor
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +16,20 @@ WEATHERAPI_URL = (
     f"{settings.WEATHERAPI_BASE_URL.rstrip('/')}/forecast.json"
 )
 
-MAX_WORKERS = 3
-CACHE_SECONDS = 1800
+WEATHER_GRID_DEGREES = float(
+    os.getenv("WEATHER_GRID_DEGREES", "0.25")
+)
+
+WEATHER_MAX_WORKERS = int(
+    os.getenv("WEATHER_MAX_WORKERS", "6")
+)
+
+WEATHER_CACHE_SECONDS = int(
+    os.getenv("WEATHER_CACHE_SECONDS", "1800")
+)
+
+MAX_WORKERS = getattr(settings, "WEATHER_MAX_WORKERS", 6)
+CACHE_SECONDS = getattr(settings, "WEATHER_CACHE_SECONDS", 1800)
 MAX_FORECAST_DAYS = 3
 
 
@@ -57,18 +71,44 @@ def _valid_number(value):
 
     return number
 
+def weather_grid_location(latitude, longitude):
+    """
+    Return the center of a geographic forecast cell.
 
-def _cache_key(latitude, longitude):
+    Every coordinate in the same cell uses the same
+    forecast location, allowing safe cache-key reuse.
     """
-    Round to about 1 km resolution near mid-latitudes.
-    Reuse forecasts for nearby checkpoints.
-    """
+
+    grid = getattr(settings, "WEATHER_GRID_DEGREES", 0.25)
+
+    if not 0 < grid <= 1:
+        raise WeatherServiceError(
+            "WEATHER_GRID_DEGREES must be between 0 and 1."
+        )
+
+    latitude = float(latitude)
+    longitude = float(longitude)
+
+    cell_lat = (
+        floor(latitude / grid) + 0.5
+    ) * grid
+
+    cell_lon = (
+        floor(longitude / grid) + 0.5
+    ) * grid
 
     return (
-        "weatherapi:forecast:v1:"
-        f"{round(float(latitude), 2):.2f}:"
-        f"{round(float(longitude), 2):.2f}"
+        round(max(-90, min(90, cell_lat)), 6),
+        round(max(-180, min(180, cell_lon)), 6),
     )
+
+
+def _cache_key(latitude, longitude):
+    lat, lon = weather_grid_location(
+        latitude, longitude
+    )
+
+    return f"weatherapi:forecast:v2:{lat:.6f}:{lon:.6f}"
 
 
 def fetch_location_forecast(latitude, longitude):
@@ -90,9 +130,13 @@ def fetch_location_forecast(latitude, longitude):
     if cached is not None:
         return cached
 
+    grid_lat, grid_lon = weather_grid_location(
+        latitude, longitude
+    )
+
     params = {
         "key": settings.WEATHERAPI_KEY,
-        "q": f"{latitude},{longitude}",
+        "q": f"{grid_lat},{grid_lon}",
         "days": MAX_FORECAST_DAYS,
         "aqi": "no",
         "alerts": "no",
@@ -138,7 +182,7 @@ def fetch_location_forecast(latitude, longitude):
             "Weather provider returned no forecast."
         )
 
-    cache.set(key, data, timeout=CACHE_SECONDS)
+    cache.set(key, data, timeout=settings.WEATHER_CACHE_SECONDS,)
 
     return data
 
