@@ -1,59 +1,72 @@
 
 import logging
 import requests
+
 from django.conf import settings
 
-
 logger = logging.getLogger(__name__)
+
+MAPBOX_GEOCODING_URL = (
+    "https://api.mapbox.com/search/geocode/v6/forward"
+)
 
 
 class GeocodingError(Exception):
     pass
 
 
-def geocode_location(location: str) -> dict:
-    """Convert a location name to geographic coordinates."""
+def geocode_location(query):
+    token = settings.MAPBOX_ACCESS_TOKEN
 
-    if not settings.ORS_API_KEY:
-        raise GeocodingError("ORS API key is not configured.")
-
-    url = f"{settings.ORS_BASE_URL}/geocode/search"
+    if not token:
+        raise GeocodingError(
+            "Mapbox access token is not configured."
+        )
 
     try:
         response = requests.get(
-            url,
-            headers={
-                "Authorization": settings.ORS_API_KEY,
-                "Accept": "application/json",
-            },
+            MAPBOX_GEOCODING_URL,
             params={
-                "text": location,
-                "size": 1,
+                "q": query,
+                "access_token": token,
+                "limit": 1,
+                "types": "place,locality",
+                "autocomplete": "false",
+                "permanent": "false",
             },
-            timeout=15,
+            timeout=12,
         )
+
         response.raise_for_status()
 
-        features = response.json().get("features", [])
-
-    except (requests.RequestException, ValueError) as exc:
-        http_status = getattr(getattr(exc, "response", None), "status_code", None)
-        logger.warning("ORS geocoding failure: status=%s error=%s", http_status, type(exc).__name__)
-        raise GeocodingError(
-            "Geocoding provider request failed."
-        ) from exc
-
-    if not features:
-        raise GeocodingError(
-            f"No location found for '{location}'."
+        features = response.json().get(
+            "features", []
         )
 
-    feature = features[0]
-    longitude, latitude = feature["geometry"]["coordinates"]
+        if not features:
+            raise GeocodingError(
+                f"Location not found: {query}"
+            )
 
-    return {
-        "name": feature["properties"].get("label", location),
-        "latitude": latitude,
-        "longitude": longitude,
-        "coordinates": [longitude, latitude],
-    }
+        feature = features[0]
+
+        coordinates = feature["geometry"]["coordinates"]
+
+        properties = feature.get("properties", {})
+
+        return {
+            "name": properties.get(
+                "full_address"
+            ) or properties.get(
+                "name"
+            ) or query,
+            "coordinates": coordinates,
+        }
+
+    except requests.RequestException as exc:
+        logger.exception(
+            "Mapbox geocoding request failed"
+        )
+        raise GeocodingError(
+            "Unable to geocode location."
+        ) from exc
