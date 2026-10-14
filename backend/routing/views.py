@@ -35,6 +35,15 @@ from .services.corridor_service import (
     get_corridor_forecast,
 )
 
+import hashlib
+import json
+import logging
+import time
+
+from django.core.cache import cache
+
+logger = logging.getLogger(__name__)
+
 @api_view(["GET"])
 def health_check(request):
     return Response({
@@ -70,15 +79,57 @@ def calculate_routes(request):
 
     data = serializer.validated_data
 
+    # Cache identical trip-analysis requests.
+    # Changing departure time, load or checkpoint interval
+    # creates a different cache key.
+    cache_parameters = {
+        "origin": data["origin"].strip().lower(),
+        "destination": data["destination"].strip().lower(),
+        "departure_time": data["departure_time"].isoformat(),
+        "load_weight": data["load_weight"],
+        "checkpoint_interval": int(data["checkpoint_interval"]),
+    }
+
+    cache_digest = hashlib.sha256(
+        json.dumps(
+            cache_parameters,
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+
+    route_cache_key = f"route-analysis:v2:{cache_digest}"
+
+    cached_result = cache.get(route_cache_key)
+
+    if cached_result is not None:
+        logger.info("Route analysis cache hit")
+        return Response(cached_result)
+
+    analysis_started = time.perf_counter()
+
     try:
+        step_started = time.perf_counter()
+        
         origin = geocode_location(data["origin"])
         destination = geocode_location(data["destination"])
+
+        logger.info(
+            "PERF geocoding: %.2fs",
+            time.perf_counter() - step_started,
+        )
+
+        step_started = time.perf_counter()
 
         result = get_mapbox_routes(
             origin_coords=origin["coordinates"],
             destination_coords=destination["coordinates"],
             origin_name=data["origin"],
             destination_name=data["destination"],
+        )
+
+        logger.info(
+            "PERF Mapbox: %.2fs",
+            time.perf_counter() - step_started,
         )
 
         routes = result["routes"]
@@ -99,8 +150,16 @@ def calculate_routes(request):
             all_checkpoints.extend(checkpoints)
 
         # Step 2: Fetch ETA-specific weather in batches.
+        step_started = time.perf_counter()
+        
         weather_results = fetch_checkpoint_weather(
             all_checkpoints
+        )
+
+        logger.info(
+            "PERF WeatherAPI: %.2fs for %d checkpoints",
+            time.perf_counter() - step_started,
+            len(all_checkpoints),
         )
 
         # Step 3: Apply forecast and load-based risk.
@@ -130,21 +189,34 @@ def calculate_routes(request):
         # Step 5: Select the best eligible route.
         recommendation = recommend_best_route(routes)
 
-        return Response({
+        response_data = {
             "origin": origin,
             "destination": destination,
-            "departure_time": (
-                data["departure_time"].isoformat()
-            ),
+            "departure_time": data["departure_time"].isoformat(),
             "load_weight": data["load_weight"],
             "checkpoint_interval": int(
                 data["checkpoint_interval"]
             ),
             "routing_provider": "mapbox",
-            "weather_provider": "open-meteo",
+            "weather_provider": "weatherapi",
             **result,
             **recommendation,
-        })
+        }
+
+        cache.set(
+            route_cache_key,
+            response_data,
+            timeout=600,
+        )
+
+        logger.info(
+            "Route analysis completed in %.2fs",
+            time.perf_counter() - analysis_started,
+        )
+
+        return Response(response_data)
+
+        return Response(response_data)
 
     except (GeocodingError, MapboxRoutingError) as exc:
         return Response(
