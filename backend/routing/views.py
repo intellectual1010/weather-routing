@@ -41,6 +41,7 @@ import logging
 import time
 
 from django.core.cache import cache
+from .services.weather_service import _cache_key
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +152,17 @@ def calculate_routes(request):
 
         # Step 2: Fetch ETA-specific weather in batches.
         step_started = time.perf_counter()
+        
+        unique_cells = {
+            _cache_key(point["latitude"], point["longitude"])
+            for point in all_checkpoints
+        }
+
+        logger.info(
+            "WEATHER GRID: %d checkpoints -> %d unique forecast cells",
+            len(all_checkpoints),
+            len(unique_cells),
+        )
         
         weather_results = fetch_checkpoint_weather(
             all_checkpoints
