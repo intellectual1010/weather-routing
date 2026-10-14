@@ -70,6 +70,7 @@ def geocode_search(request):
         return Response(location)
 
     except GeocodingError as exc:
+        logger.exception("GEOCODE SEARCH FAILURE")
         return Response(
             {"error": str(exc)},
             status=status.HTTP_502_BAD_GATEWAY,
@@ -236,21 +237,22 @@ def calculate_routes(request):
 
         return Response(response_data)
 
-        return Response(response_data)
-
     except (GeocodingError, MapboxRoutingError) as exc:
+        logger.exception("ROUTE PROVIDER FAILURE (%s)", type(exc).__name__)
         return Response(
             {"error": str(exc)},
             status=status.HTTP_502_BAD_GATEWAY,
         )
 
     except WeatherServiceError as exc:
+        logger.exception("ROUTE WEATHER FAILURE (%s)", type(exc).__name__)
         return Response(
             {"error": str(exc)},
             status=status.HTTP_502_BAD_GATEWAY,
         )
 
     except ValueError:
+        logger.exception("ROUTE INVALID DATA")
         return Response(
             {"error": "Invalid route or weather data."},
             status=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -282,6 +284,7 @@ def corridor_forecast(request):
         return Response(result)
 
     except CorridorForecastError as exc:
+        logger.exception("CORRIDOR FORECAST FAILURE")
         return Response(
             {"error": str(exc)},
             status=status.HTTP_502_BAD_GATEWAY,

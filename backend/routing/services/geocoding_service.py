@@ -1,6 +1,10 @@
 
+import logging
 import requests
 from django.conf import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class GeocodingError(Exception):
@@ -33,6 +37,8 @@ def geocode_location(location: str) -> dict:
         features = response.json().get("features", [])
 
     except (requests.RequestException, ValueError) as exc:
+        http_status = getattr(getattr(exc, "response", None), "status_code", None)
+        logger.warning("ORS geocoding failure: status=%s error=%s", http_status, type(exc).__name__)
         raise GeocodingError(
             "Geocoding provider request failed."
         ) from exc

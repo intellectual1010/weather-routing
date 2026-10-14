@@ -36,7 +36,7 @@ class RoutingAPITests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    @patch("routing.views.fetch_checkpoint_weather")
+    @patch("routing.views.fetch_sampled_weather")
     @patch("routing.views.get_mapbox_routes")
     @patch("routing.views.geocode_location")
     def test_route_endpoint(
