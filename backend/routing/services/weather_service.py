@@ -7,10 +7,11 @@ import hashlib
 import json
 from django.core.cache import cache
 import logging
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+OPEN_METEO_URL = settings.OPEN_METEO_BASE_URL
 
 BATCH_SIZE = 5
 MAX_WORKERS = 2
@@ -201,18 +202,28 @@ def select_forecast(data, eta):
 
     wind = number("wind_speed_10m")
     rain = number("rain")
-    snow_cm = number("snowfall")
+    snow = number("snowfall")
 
-    if None in (wind, rain, snow_cm):
+    if None in (wind, rain, snow):
         return None
 
-    if min(wind, rain, snow_cm) < 0:
+    snow_unit = (
+        data.get("hourly_units", {})
+        .get("snowfall", "")
+        .lower()
+    )
+
+    if snow_unit in ("inch", "in"):
+        snow_inches = snow
+    elif snow_unit == "cm":
+        snow_inches = snow / 2.54
+    else:
         return None
 
     return {
         "wind_mph": wind,
         "rain_in_hr": rain,
-        "snow_in_hr": snow_cm * CM_TO_INCH,
+        "snow_in_hr": snow_inches,
         "forecast_time": parsed_times[index].isoformat(),
         "source": "open-meteo",
     }
