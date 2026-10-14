@@ -6,11 +6,14 @@ import requests
 import hashlib
 import json
 from django.core.cache import cache
+import logging
+
+logger = logging.getLogger(__name__)
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 
-BATCH_SIZE = 20
-MAX_WORKERS = 4
+BATCH_SIZE = 5
+MAX_WORKERS = 2
 CM_TO_INCH = 1 / 2.54
 
 
@@ -77,6 +80,13 @@ def _fetch_weather_batch_uncached(points):
             params=params,
             timeout=40,
         )
+
+        if not response.ok:
+            logger.error(
+                "Open-Meteo HTTP %s: %s",
+                response.status_code,
+                response.text[:1000],
+            )
         response.raise_for_status()
         payload = response.json()
     except (requests.RequestException, ValueError) as exc:
