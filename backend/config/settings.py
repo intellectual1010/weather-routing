@@ -101,6 +101,13 @@ OPEN_METEO_BASE_URL = os.getenv(
     "https://api.open-meteo.com/v1/forecast",
 )
 
+WEATHERAPI_KEY = os.getenv("WEATHERAPI_KEY", "")
+
+WEATHERAPI_BASE_URL = os.getenv(
+    "WEATHERAPI_BASE_URL",
+    "https://api.weatherapi.com/v1",
+)
+
 
 # ============================================================
 # APPLICATIONS

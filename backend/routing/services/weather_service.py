@@ -1,28 +1,35 @@
 
-from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor
-import math
-import requests
-import hashlib
-import json
-from django.core.cache import cache
 import logging
+import math
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
+
+import requests
 from django.conf import settings
+from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
-OPEN_METEO_URL = settings.OPEN_METEO_BASE_URL
+WEATHERAPI_URL = (
+    f"{settings.WEATHERAPI_BASE_URL.rstrip('/')}/forecast.json"
+)
 
-BATCH_SIZE = 5
-MAX_WORKERS = 2
-CM_TO_INCH = 1 / 2.54
+MAX_WORKERS = 3
+CACHE_SECONDS = 1800
+MAX_FORECAST_DAYS = 3
 
 
 class WeatherServiceError(Exception):
     pass
 
 
+class WeatherQuotaExceeded(WeatherServiceError):
+    pass
+
+
 def parse_utc(value):
+    """Convert an aware datetime or ISO string to UTC."""
+
     if isinstance(value, str):
         value = datetime.fromisoformat(
             value.replace("Z", "+00:00")
@@ -30,227 +37,271 @@ def parse_utc(value):
 
     if value.tzinfo is None:
         raise WeatherServiceError(
-            "Checkpoint ETA must include a timezone."
+            "Forecast timestamps must include a timezone."
         )
 
     return value.astimezone(timezone.utc)
 
 
-def _fetch_weather_batch_uncached(points):
+def _valid_number(value):
+    if value is None or isinstance(value, bool):
+        return None
+
+    try:
+        number = float(value)
+    except (ValueError, TypeError):
+        return None
+
+    if not math.isfinite(number) or number < 0:
+        return None
+
+    return number
+
+
+def _cache_key(latitude, longitude):
     """
-    Fetch hourly forecasts for multiple locations.
-    Each point must include latitude, longitude and eta.
+    Round to about 1 km resolution near mid-latitudes.
+    Reuse forecasts for nearby checkpoints.
     """
 
-    if not points:
-        return []
+    return (
+        "weatherapi:forecast:v1:"
+        f"{round(float(latitude), 2):.2f}:"
+        f"{round(float(longitude), 2):.2f}"
+    )
 
-    dates = [parse_utc(p["eta"]) for p in points]
 
-    now = datetime.now(timezone.utc)
-    if min(dates) < now:
+def fetch_location_forecast(latitude, longitude):
+    """
+    Fetch a 3-day hourly forecast for one location.
+
+    WeatherAPI's free forecast endpoint uses one
+    geographic location per request.
+    """
+
+    if not settings.WEATHERAPI_KEY:
         raise WeatherServiceError(
-            "Checkpoint arrival is in the past."
+            "WEATHERAPI_KEY is not configured."
         )
 
-    # The standard forecast API supports up to 16 days.
-    if max(dates).timestamp() > now.timestamp() + 15 * 86400:
-        raise WeatherServiceError(
-            "Checkpoint ETA is beyond the supported "
-            "forecast planning window."
-        )
+    key = _cache_key(latitude, longitude)
+
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
 
     params = {
-        "latitude": ",".join(
-            str(p["latitude"]) for p in points
-        ),
-        "longitude": ",".join(
-            str(p["longitude"]) for p in points
-        ),
-        "hourly": "wind_speed_10m,rain,snowfall",
-        "wind_speed_unit": "mph",
-        "precipitation_unit": "inch",
-        "timezone": "GMT",
-        "start_date": min(dates).date().isoformat(),
-        "end_date": max(dates).date().isoformat(),
+        "key": settings.WEATHERAPI_KEY,
+        "q": f"{latitude},{longitude}",
+        "days": MAX_FORECAST_DAYS,
+        "aqi": "no",
+        "alerts": "no",
     }
 
     try:
         response = requests.get(
-            OPEN_METEO_URL,
+            WEATHERAPI_URL,
             params=params,
-            timeout=40,
+            timeout=20,
         )
+
+        if response.status_code == 429:
+            raise WeatherQuotaExceeded(
+                "WeatherAPI request limit exceeded."
+            )
 
         if not response.ok:
             logger.error(
-                "Open-Meteo HTTP %s: %s",
+                "WeatherAPI request failed: HTTP %s, body=%s",
                 response.status_code,
-                response.text[:1000],
+                response.text[:300],
             )
-        response.raise_for_status()
-        payload = response.json()
-    except (requests.RequestException, ValueError) as exc:
+
+            raise WeatherServiceError(
+                "Weather provider temporarily unavailable."
+            )
+
+        data = response.json()
+
+    except requests.RequestException as exc:
         raise WeatherServiceError(
-            "Open-Meteo forecast request failed."
+            "Weather provider network request failed."
         ) from exc
 
-    if isinstance(payload, dict):
-        payload = [payload]
-
-    if len(payload) != len(points):
+    except ValueError as exc:
         raise WeatherServiceError(
-            "Unexpected number of weather responses."
+            "Weather provider returned invalid JSON."
+        ) from exc
+
+    if not data.get("forecast", {}).get("forecastday"):
+        raise WeatherServiceError(
+            "Weather provider returned no forecast."
         )
 
-    return [
-        select_forecast(data, point["eta"])
-        for data, point in zip(payload, points)
-    ]
+    cache.set(key, data, timeout=CACHE_SECONDS)
 
-def fetch_weather_batch(points):
-    """
-    Cache the forecast response for identical checkpoint
-    coordinates and ETA values for 15 minutes.
-    """
+    return data
 
-    if not points:
-        return []
-
-    cache_input = [
-        {
-            "lat": round(float(p["latitude"]), 3),
-            "lon": round(float(p["longitude"]), 3),
-            "eta_hour": parse_utc(p["eta"]).replace(
-                minute=0,
-                second=0,
-                microsecond=0,
-            ).isoformat(),
-        }
-        for p in points
-    ]
-
-    raw_key = json.dumps(
-        cache_input,
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-
-    digest = hashlib.sha256(
-        raw_key.encode("utf-8")
-    ).hexdigest()
-
-    cache_key = f"weather:batch:v1:{digest}"
-
-    cached = cache.get(cache_key)
-
-    if cached is not None:
-        return cached
-
-    result = _fetch_weather_batch_uncached(points)
-
-    cache.set(cache_key, result, timeout=900)
-
-    return result
 
 def select_forecast(data, eta):
     """
-    Select the nearest hourly forecast to checkpoint ETA.
+    Select the nearest available forecast hour using
+    WeatherAPI time_epoch (UTC Unix timestamps).
 
-    Hourly precipitation values represent an hour,
-    so this is an approximation of conditions at arrival.
+    Returns None when forecast coverage is missing.
     """
 
     target = parse_utc(eta)
-    hourly = data.get("hourly") or {}
+    target_timestamp = target.timestamp()
 
-    times = hourly.get("time") or []
-    if not times:
+    hours = []
+
+    for forecast_day in data.get(
+        "forecast", {}
+    ).get("forecastday", []):
+        hours.extend(forecast_day.get("hour", []))
+
+    if not hours:
         return None
 
-    parsed_times = [
-        datetime.fromisoformat(t).replace(
-            tzinfo=timezone.utc
-        )
-        for t in times
+    valid_hours = [
+        hour for hour in hours
+        if hour.get("time_epoch") is not None
     ]
 
-    index = min(
-        range(len(parsed_times)),
-        key=lambda i: abs(
-            (parsed_times[i] - target).total_seconds()
+    if not valid_hours:
+        return None
+
+    hour = min(
+        valid_hours,
+        key=lambda item: abs(
+            float(item["time_epoch"]) - target_timestamp
         ),
     )
 
-    if abs(
-        (parsed_times[index] - target).total_seconds()
-    ) > 3600:
+    forecast_timestamp = float(hour["time_epoch"])
+
+    # Do not silently use distant forecasts.
+    if abs(forecast_timestamp - target_timestamp) > 1800:
         return None
 
-    def number(field):
-        values = hourly.get(field) or []
-        if index >= len(values):
-            return None
+    wind = _valid_number(hour.get("wind_mph"))
+    precipitation = _valid_number(hour.get("precip_in"))
+    snow_cm = _valid_number(hour.get("snow_cm"))
 
-        value = values[index]
-
-        if value is None:
-            return None
-
-        value = float(value)
-        return value if math.isfinite(value) else None
-
-    wind = number("wind_speed_10m")
-    rain = number("rain")
-    snow = number("snowfall")
-
-    if None in (wind, rain, snow):
-        return None
-
-    snow_unit = (
-        data.get("hourly_units", {})
-        .get("snowfall", "")
-        .lower()
-    )
-
-    if snow_unit in ("inch", "in"):
-        snow_inches = snow
-    elif snow_unit == "cm":
-        snow_inches = snow / 2.54
-    else:
+    if any(
+        value is None
+        for value in (wind, precipitation, snow_cm)
+    ):
         return None
 
     return {
         "wind_mph": wind,
-        "rain_in_hr": rain,
-        "snow_in_hr": snow_inches,
-        "forecast_time": parsed_times[index].isoformat(),
-        "source": "open-meteo",
+        # WeatherAPI precipitation includes liquid
+        # equivalent precipitation, potentially snow.
+        # Used as a conservative precipitation proxy.
+        "rain_in_hr": precipitation,
+        "snow_in_hr": snow_cm / 2.54,
+        "forecast_time": datetime.fromtimestamp(
+            forecast_timestamp,
+            tz=timezone.utc,
+        ).isoformat(),
+        "source": "weatherapi",
     }
+
+
+def _fetch_one_checkpoint(checkpoint):
+    data = fetch_location_forecast(
+        checkpoint["latitude"],
+        checkpoint["longitude"],
+    )
+
+    return select_forecast(
+        data,
+        checkpoint["eta"],
+    )
+
+
+def fetch_weather_batch(points):
+    """Fetch weather for a batch, preserving order."""
+
+    if not points:
+        return []
+
+    results = [None] * len(points)
+
+    with ThreadPoolExecutor(
+        max_workers=MAX_WORKERS
+    ) as executor:
+        future_map = {
+            executor.submit(
+                _fetch_one_checkpoint, point
+            ): index
+            for index, point in enumerate(points)
+        }
+
+        for future in as_completed(future_map):
+            index = future_map[future]
+            results[index] = future.result()
+
+    return results
 
 
 def fetch_checkpoint_weather(checkpoints):
     """
-    Fetch forecasts in batches, preserving checkpoint order.
+    Return weather results in original checkpoint order.
+
+    Missing forecast hours are returned as None,
+    allowing the risk engine to mark them 'unknown'.
     """
 
     if not checkpoints:
         return []
 
-    batches = [
-        checkpoints[i:i + BATCH_SIZE]
-        for i in range(0, len(checkpoints), BATCH_SIZE)
-    ]
+    # Deduplicate locations within one request.
+    unique_locations = {}
+
+    for checkpoint in checkpoints:
+        key = _cache_key(
+            checkpoint["latitude"],
+            checkpoint["longitude"],
+        )
+
+        if key not in unique_locations:
+            unique_locations[key] = checkpoint
+
+    locations = list(unique_locations.items())
+    forecasts = {}
 
     with ThreadPoolExecutor(
         max_workers=MAX_WORKERS
     ) as executor:
-        results = list(
-            executor.map(fetch_weather_batch, batches)
+        future_map = {
+            executor.submit(
+                fetch_location_forecast,
+                point["latitude"],
+                point["longitude"],
+            ): key
+            for key, point in locations
+        }
+
+        for future in as_completed(future_map):
+            key = future_map[future]
+            forecasts[key] = future.result()
+
+    results = []
+
+    for checkpoint in checkpoints:
+        key = _cache_key(
+            checkpoint["latitude"],
+            checkpoint["longitude"],
         )
 
-    return [
-        weather
-        for batch in results
-        for weather in batch
-    ]
+        results.append(
+            select_forecast(
+                forecasts[key],
+                checkpoint["eta"],
+            )
+        )
+
+    return results

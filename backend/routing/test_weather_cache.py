@@ -1,10 +1,12 @@
 
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.core.cache import cache
 from django.test import SimpleTestCase
 
-from .services.weather_service import fetch_weather_batch
+from .services.weather_service import (
+    fetch_location_forecast,
+)
 
 
 class WeatherCacheTests(SimpleTestCase):
@@ -13,22 +15,33 @@ class WeatherCacheTests(SimpleTestCase):
         cache.clear()
 
     @patch(
-        "routing.services.weather_service."
-        "_fetch_weather_batch_uncached"
+        "routing.services.weather_service.requests.get"
     )
-    def test_repeated_batch_uses_cache(self, mock_fetch):
-        mock_fetch.return_value = [
-            {"wind_mph": 12.0}
-        ]
+    def test_forecast_uses_cache(self, mock_get):
+        mock_response = Mock()
 
-        points = [{
-            "latitude": 41.8781,
-            "longitude": -87.6298,
-            "eta": "2026-10-15T10:00:00+00:00",
-        }]
+        mock_response.status_code = 200
+        mock_response.ok = True
+        mock_response.json.return_value = {
+            "forecast": {
+                "forecastday": [
+                    {"date": "2026-10-15", "hour": []}
+                ]
+            }
+        }
 
-        first = fetch_weather_batch(points)
-        second = fetch_weather_batch(points)
+        mock_get.return_value = mock_response
+
+        with self.settings(
+            WEATHERAPI_KEY="test_key"
+        ):
+            first = fetch_location_forecast(
+                41.8781, -87.6298
+            )
+
+            second = fetch_location_forecast(
+                41.8781, -87.6298
+            )
 
         self.assertEqual(first, second)
-        mock_fetch.assert_called_once()
+        mock_get.assert_called_once()
