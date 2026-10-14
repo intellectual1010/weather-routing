@@ -127,6 +127,14 @@ WEATHER_CACHE_SECONDS = int(
     os.getenv("WEATHER_CACHE_SECONDS", "1800")
 )
 
+WEATHER_MAX_LOCATIONS = int(
+    os.getenv("WEATHER_MAX_LOCATIONS", "35")
+)
+
+WEATHER_MAX_SAMPLE_DISTANCE_KM = float(
+    os.getenv("WEATHER_MAX_SAMPLE_DISTANCE_KM", "90")
+)
+
 
 # ============================================================
 # APPLICATIONS

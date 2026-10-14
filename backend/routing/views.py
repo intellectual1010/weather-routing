@@ -42,6 +42,7 @@ import time
 
 from django.core.cache import cache
 from .services.weather_service import _cache_key
+from .services.weather_sampling_service import fetch_sampled_weather
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +165,7 @@ def calculate_routes(request):
             len(unique_cells),
         )
         
-        weather_results = fetch_checkpoint_weather(
+        weather_results = fetch_sampled_weather(
             all_checkpoints
         )
 
