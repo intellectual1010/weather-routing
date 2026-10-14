@@ -114,7 +114,7 @@ WEATHERAPI_BASE_URL = os.getenv(
 
 # Weather forecast spatial grid
 WEATHER_GRID_DEGREES = float(
-    os.getenv("WEATHER_GRID_DEGREES", "0.25")
+    os.getenv("WEATHER_GRID_DEGREES", "0.35")
 )
 
 # Maximum concurrent WeatherAPI requests

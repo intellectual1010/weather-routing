@@ -17,7 +17,7 @@ WEATHERAPI_URL = (
 )
 
 WEATHER_GRID_DEGREES = float(
-    os.getenv("WEATHER_GRID_DEGREES", "0.25")
+    os.getenv("WEATHER_GRID_DEGREES", "0.35")
 )
 
 WEATHER_MAX_WORKERS = int(
@@ -79,7 +79,7 @@ def weather_grid_location(latitude, longitude):
     forecast location, allowing safe cache-key reuse.
     """
 
-    grid = getattr(settings, "WEATHER_GRID_DEGREES", 0.25)
+    grid = getattr(settings, "WEATHER_GRID_DEGREES", 0.35)
 
     if not 0 < grid <= 1:
         raise WeatherServiceError(

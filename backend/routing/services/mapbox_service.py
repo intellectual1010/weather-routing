@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 METERS_TO_MILES = 0.000621371
 
 MAX_ROUTES = 3
-MAX_WAYPOINT_ATTEMPTS = 3
+MAX_WAYPOINT_ATTEMPTS = 4
 MAX_DETOUR_FACTOR = 1.45
 
 # A candidate must diverge from existing routes over
@@ -46,6 +46,12 @@ CORRIDOR_WAYPOINTS = {
         "Louisville, Kentucky",
         "Indianapolis, Indiana",
         "Birmingham, Alabama",
+    ],
+    frozenset(("seattle", "denver")): [
+        "Boise, Idaho",
+        "Salt Lake City, Utah",
+        "Spokane, Washington",
+        "Billings, Montana",
     ],
 }
 
